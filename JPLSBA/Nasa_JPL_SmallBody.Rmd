@@ -537,7 +537,8 @@ par(mfrow=c(1,4))
 X <- JPL_SmallBody_data[,3:7]
 for(iter in 2:5) {dat <- list(PHO = X[X$neo_class == "PHO",iter],
                               NEO = X[X$neo_class == "NEO",iter],SO = X[X$neo_class == "SO",iter])
-boxplot(dat,xlab="neo_class", cex=0, main=str_c(names(X)[iter], ""))}
+ifelse(iter != 5, boxplot(dat,xlab="neo_class", cex=0, main=str_c(names(X)[iter], "")),
+boxplot(dat,xlab="neo_class", log="y", cex=0, main=str_c(names(X)[5]," (log)")))}
 ```
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
