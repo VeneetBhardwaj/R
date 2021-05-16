@@ -498,7 +498,7 @@ data_process <- function(preData, tChoice){
   #convert to radians and add additional derived variables
   preData <- preData %>%
     mutate(om=om*(pi/180), w=w*(pi/180), i=as.numeric(i*(pi/180)),
-           t_to_p = as.numeric((per - (ma/n))),
+           t_to_p = as.numeric((per - (ma/n))), a=log2(a),
            m_d = as.numeric(moid_jup-moid))
   preData <- preData %>% mutate(T_p = as.numeric(round(1-(t_to_p/per),4)))
   preData <- preData %>% select(neo_class,H,q,moid,m_d,e,t_jup,a,i,T_p)

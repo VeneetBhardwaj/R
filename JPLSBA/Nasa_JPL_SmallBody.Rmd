@@ -873,7 +873,7 @@ _But, a picture is worth a thousand words._
 
 The JPL_SmallBody_data dataset is normalized by columns, for each $neo\_class$, and then ordered according to the results of the clustering algorithm for a visual cue.
 
-```{r message=FALSE, warning=FALSE, include=TRUE}
+```{r message=FALSE, warning=FALSE, include=TRUE, fig.height=6}
 x <- JPL_SmallBody_data[,3:18]
 
 #extract and sweep different categories
@@ -940,7 +940,7 @@ data_process <- function(preData, tChoice){
   #convert to radians and add additional derived variables
     preData <- preData %>%
     mutate(om=om*(pi/180), w=w*(pi/180), i=as.numeric(i*(pi/180)),
-           t_to_p = as.numeric((per - (ma/n))),
+           t_to_p = as.numeric((per - (ma/n))), a=log2(a),
            m_d = as.numeric(moid_jup-moid))
     preData <- preData %>% mutate(T_p = as.numeric(round(1-(t_to_p/per),4)))
     preData <- preData %>% select(neo_class,H,q,moid,m_d,e,t_jup,a,i,T_p)
@@ -1122,7 +1122,7 @@ cm$table
 cat("Accuracy : ", cm$overall["Accuracy"], "\n")
 ```
 
-+   The multinom model was able to identify some of the categories, however since the 7 PCA components used explain about 99.9% of the variablily. The accuracy that we have is almost 98%, but it is the Sensitivity in individual categories (SO has a Recall of 1) that matters as well in this case.
++   The multinom model was able to identify some of the categories, however since the 7 PCA components used explain about 99.7% of the variablily. The accuracy that we have is almost 98%, but it is the Sensitivity in individual categories (SO has a Recall of 1) that matters as well in this case.
 
 ```{r message=FALSE, warning=FALSE, include=TRUE}
 results %>% filter (model_name == "PCA Multinom")  %>% knitr::kable()
@@ -2021,7 +2021,7 @@ inaccurate_details %>% filter (model_name == "Holdout : gbm") %>% .[,3:10] %>%
 ```
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
-rm(.Random.seed,inaccuracy_check,JPL_F,labels,pred_ranger,validation,cm,descriptive_data,Final_rpart,gettuned,inaccurate_details,JPL_data,JPL_validation,pred_O_ranger,pred_rpart,results_process,rpart_cp,y_hat_rf,best.iter,data_process,git_gbm,fit_ranger,fit_wsrf,rf_mtry,y_f_gbm,y_f_wsrf,y_f_wsrf_m,fit_gbm)
+rm(.Random.seed,inaccuracy_check,inaccurate_details,JPL_F,labels,pred_ranger,validation,cm,descriptive_data,Final_rpart,gettuned,JPL_data,JPL_validation,pred_O_ranger,pred_rpart,results_process,rpart_cp,y_hat_rf,best.iter,data_process,git_gbm,fit_ranger,fit_wsrf,rf_mtry,y_f_gbm,y_f_wsrf,y_f_wsrf_m,fit_gbm)
 gc()
 ```
 
@@ -2052,7 +2052,7 @@ The Final validation was done with The Ranger model (a fast implementation of ra
 **Recall**
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 vh_models <- c("Validation : Ranger","Validation : WSRF","Validation : rpart",
-                  "Holdout : gbm","Holdout : Ranger","Holdout : WSRF")
+                  "Holdout : Ranger","Holdout : WSRF","Holdout : gbm")
 F1_score <- results %>% filter(model_name %in% vh_models) %>%
   select(model_name, F1, Object) %>% spread(.,Object,F1)
 Recall_score <- results %>% filter(model_name %in% vh_models) %>%
@@ -2069,7 +2069,7 @@ F1_score  %>% knitr::kable()
 The Objective of the case study, to build a machine learning model to predict the classification of  the small solar bodies into $PHO$, $NEO$ and $SO$ (other small solar bodies), with the target measures of Recall for each category above 0.99 and F1 Score for each category above 0.99 was achieved.
 
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fi}
 par(mfrow=c(1,1))
 results %>%  filter(model_name %in% vh_models) %>%
   ggplot(aes(F1,Recall, col=Object)) + geom_point(pch=19, cex=3)  +
