@@ -58,7 +58,7 @@ _ Compressed split files have been uploaded in the folder https://raw.githubuser
 \newpage
 
 ## A Brief History 
-_source wikipedia_
+_source: wikipedia _ | _image source: wikipedia_ 
 
 Comets were the first near-Earth objects to be observed by us.
 
