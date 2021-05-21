@@ -2083,7 +2083,7 @@ results %>%  filter(model_name %in% vh_models) %>%
 
 Further tweaking and tuning of the models and reassessing variables, both observed and derived might achieve an absolute Recall and F1 score of 1. 
 
-The models in validation and holdout (examplifying implementation) have been built using the real world data and thus can be implemented as is for conformation of NEO classification, and if required, used for classification of new Small Body Objects, which have the $H,q,moid,m\_d,e,t\_jup,a,i,T\_p$ observations available. Owing to the sensitivity required on the classification, as in the case of all machine learning implementations, a human audit of the results is recommended.
+The models in validation and holdout (examplifying implementation) have been built using the real world data and thus can be implemented as is for conformation of NEO classification, and if required, used for classification of new Small Body Objects, which have the $H,q,moid,m\_d,e,t\_jup,a,i,T\_p$ observations available. The limitation though, due to the sensitivity required on the classification, as in the case of all machine learning implementations, a human audit of the results is recommended.
 
 \hfill
 
