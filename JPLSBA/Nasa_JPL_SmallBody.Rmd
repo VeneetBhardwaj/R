@@ -461,7 +461,7 @@ rm(model_variables, validation_index,desc_d)
 
 +   $id$            :   The unique id for each object.
 
-+   $class$         :   classification of the objects accroding to their orbits.
++   $class$         :   classification of the objects according to their orbits.
 
 +   $neo\_class$     :   The model Outcome Variable.
 
@@ -651,7 +651,7 @@ m\_d \ = \ moid\_jup \ - \ moid
 $$
 
 
-**The new variable will reflect in the [Process Data] chapter.**
+*The new variable will reflect in the [Process Data] chapter.*
 
 \newpage
 
@@ -780,7 +780,7 @@ rm(X,dat,iter)
 
 Observations:
 
-+   $per$ for most *NEO,PHO* objects are smaller than *SO* and might imply that lower the orbit period ($per$) less the likelihood of the object being and *NEO,PHO*.
++   $per$ for most *NEO,PHO* objects are smaller than *SO*, thus implying that smaller the orbit period ($per$) more the likelihood of the object being a *NEO or PHO*.
 
 The stripchart below shows the spread of $per, n, ma, rms$ (of ~25,000 observations) in the $neo\_class$ :
 
@@ -829,7 +829,7 @@ $$
 =>  T_{p}  =  1 - \frac{t_{aphelion}}{per} \ \mbox{  or  } \ T_p = \frac{\frac{ma}{n}}{per}
 $$
 
-**These new variables will reflect in the [Process Data] chapter.**
+*These new variables will reflect in the [Process Data] chapter.*
 
 
 \newpage
@@ -1570,7 +1570,7 @@ fit_ranger <- ranger(x = mat_train$X, y = mat_train$Y,
                      splitrule = 'gini',
                      importance = 'impurity', 
                      regularization.usedepth = TRUE,
-                     # additional weight of ~ 40:60:0  ~ 2:3:0 ratio from prime numbers. 
+                     # additional weight of ~  2:3:0 ratio from (the next) prime numbers. 
                      class.weights = c(7,11,0), 
                      num.threads = 6, verbose = TRUE)
 ```
