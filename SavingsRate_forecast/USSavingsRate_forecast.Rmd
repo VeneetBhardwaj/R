@@ -1,0 +1,469 @@
+---
+title: 'Case Study: Predicting U.S. Saving Behavior' 
+subtitle: '(post 2008 financial crisis)'
+author: "Veneet Bhardwaj"
+date: "3/25/2021"
+fontsize: 9
+output:
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+  pdf_document: 
+    toc: yes
+    toc_depth: 5
+    number_sections: yes
+    fig_height: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(xts)
+library(stats)
+library(tidyverse)
+library(broom)
+library(tseries)
+library(fpp2)
+library(forecast)
+library(urca)
+library(vars)
+library(car)
+
+
+usa_cy <- read.csv("usa_cy.csv")
+
+usa_subset <- usa_cy[c("dateid01","rc","rdy","rnw","unemp","consumer_sentiment","sb_1975_4", "saving_rate","gov_transfers","interest_payments","y_deflator")]
+
+base_data <- usa_subset %>% filter(dateid01 >= "1961-01" & dateid01 <= "2007-12")
+base_data$dateid01 <- as.Date(base_data$dateid01)
+
+idx <- as.yearqtr(base_data$dateid01)
+
+rc <- as.xts(as.numeric(base_data$rc), order.by = idx)
+rdy <- as.xts(as.numeric(base_data$rdy), order.by = idx)
+rnw <- as.xts(as.numeric(base_data$rnw), order.by = idx)
+unemp <- as.xts(as.numeric(base_data$unemp), order.by = idx)
+consumer_sentiment <- as.xts(as.numeric(base_data$consumer_sentiment), order.by = idx)
+sb_1975_4 <- as.xts(as.numeric(base_data$sb_1975_4), order.by = idx)
+saving_rate <- as.xts(as.numeric(base_data$saving_rate), order.by = idx)
+gov_transfers <- as.xts(as.numeric(base_data$gov_transfers), order.by = idx)
+interest_payments <- as.xts(as.numeric(base_data$interest_payments), order.by = idx)
+y_deflator <- as.xts(as.numeric(base_data$y_deflator), order.by = idx)
+
+
+mrgd_data <- merge(log(rc),log(rdy), log(rnw))
+mrgd_dummy <- merge(sb_1975_4, log(consumer_sentiment), diff(unemp))
+mrgd_dummy["1961-01",3] <- mrgd_dummy["1961-04",3]
+
+# Data: to check the forecast
+fore_data <- usa_subset %>% filter(dateid01 >= "2008-01" & dateid01 < "2016-01")
+fore_data$dateid01 <- as.Date(fore_data$dateid01)
+idx_f <- as.yearqtr(fore_data$dateid01)
+c_rc <- as.xts(as.numeric(fore_data$rc), order.by = idx_f)
+c_rdy <- as.xts(as.numeric(fore_data$rdy), order.by = idx_f)
+c_rnw <- as.xts(as.numeric(fore_data$rnw), order.by = idx_f)
+c_unemp <- as.xts(as.numeric(fore_data$unemp), order.by = idx_f)
+c_consumer_sentiment <- as.xts(as.numeric(fore_data$consumer_sentiment), order.by = idx_f)
+c_sb_1975_4 <- as.xts(as.numeric(fore_data$sb_1975_4), order.by = idx_f)
+c_saving_rate <- as.xts(as.numeric(fore_data$saving_rate), order.by = idx_f)
+c_gov_transfers <- as.xts(as.numeric(fore_data$gov_transfers), order.by = idx_f)
+c_interest_payments <- as.xts(as.numeric(fore_data$interest_payments), order.by = idx_f)
+c_y_deflator <- as.xts(as.numeric(fore_data$y_deflator), order.by = idx_f)
+
+c_mrgd_dummy <- merge(c_sb_1975_4,log(c_consumer_sentiment),diff(c_unemp))
+colnames(c_mrgd_dummy) <- colnames(mrgd_dummy)
+c_mrgd_dummy["2008-01",3] <- c_mrgd_dummy["2008-04",3]
+```
+
+\newpage
+
+# Introduction
+
+```{r echo=FALSE}
+combined_sr <- rbind(saving_rate,c_saving_rate)
+plot.xts(combined_sr["1977-01/2014-10"], main="US Household Saving Rate", 
+         col="darkgreen",lwd=2, yaxis.right=FALSE)
+```
+
+The chart above shows the behavior of the U.S. household sector saving rate (in percent of disposable nominal income) since 1977:Q1 using quarterly data.
+
+The decline in the saving rate ended abruptly in 2007:4, following an 18 month period of nominal house price declines in the U.S., growing concern about the state of the U.S. housing market (nominal house prices were falling) and perhaps most importantly the onset of the global financial crisis.
+
+The economic uncertainty associated with the global financial crisis and the need to rebuild household balance sheets encouraged U.S. households to increase their saving in the near term. This possibly contributed to the severity of the financial crisis and raised questions as to whether the significant increase in the saving rate was temporary. 
+
+Thus the U.S. government took actions to stabilize the crisis by using monetary and/or fiscal policy and other channels.
+
+The objective of this case study is to construct a forecast model of US saving behavior ( *in retrospect* ), with the **Cointegration and Vector Error Correction Model**
+
+\newpage
+
+# Data Exploration
+
+$Real \ Consumption$ should be explained pretty well with the two variables $Real  \ Disposable \ Income$ and the $Real \  Net \  Worth$ , based on the **Permanent Income Hypothesis**.
+
+Examining the empirical relationship between the variables : 
+
+```{r echo=FALSE, fig.height=3, fig.width=6, warning=FALSE}
+par(mfrow=c(1,1), cex= 0.6)
+invisible(plot.xts(log(rc), col="red", lwd=2, 
+                   main="Real Consumption vs Real Disposable Income"))
+invisible(lines(log(rdy), col="blue", lwd=2))
+addLegend("bottomright", 
+c("Real Consumption - log(rc)", "Real Disposable Income - log(rdy)"), bg = "black",
+          col=c("red","blue"), lty=c(1,1))
+```
+
+The chart confirms that the 2 variables follow each other. There are periods where the gap has narrowed after 1992. Thus, there is a long run relationship between the $Real \ Consumption$ and the $Real \ Disposable \ Income$. Also, the variables are trending upwards suggesting some kind of non-stationarity (deterministic or stochastic).
+
+A chart of ratio of $real \ consumption$ to $real \ disposable \ income$ and ratio of $real \ net \ worth$ to $real \ disposable \ income$ illustrates the same.
+
+```{r echo=FALSE, fig.height=2, fig.width=6 }
+par(mfrow=c(1,2), cex= 0.6)
+plot.zoo(rbind(log(rc/rdy),log(c_rc/c_rdy)), main="log(rc/rdy)", 
+         col="blue", lwd=2, ylab = "", xlab = "")
+abline(v=as.yearqtr(as.Date("1975-01-01")), col="darkgray")
+plot.zoo(rbind(log(rnw/rdy), log(c_rnw/c_rdy)), main = "log(rnw/rdy)", 
+         col="red", lwd=2, ylab = "", xlab = "")
+abline(v=as.yearqtr(as.Date("1975-01-01")), col="darkgray",)
+abline(v=as.yearqtr(as.Date("2002-01-01")), col="darkgreen")
+abline(v=as.yearqtr(as.Date("2007-01-01")), col="darkgreen")
+```
+
++   The gap between the ratio of real consumption to real disposable income and ratio of real net worth to real disposable income after 1975 the gap seems to have widened in terms of the units being used. But, until 1975 the variables are moving almost in tandem. 
+
++   From 2002 till almost 2007, the ratio of real net worth to real disposable income increases sharply, reflecting the substantial increase in the house prices.
+
++   From 2008 onward, the process reverses, with the fall of the real disposable income following the effect of the rise in unemployment rate, following the crash in the housing market.
+
+\newpage
+
+## Regression
+
+Running the regression between the $log(rc/rdy) \ \& \ log(rnw/rdy)$, to check the requirement of a structural break variable for data prior to 1975:
+
+```{r echo=TRUE}
+reg <- lm(log(rc/rdy)~log(rnw/rdy), na.action=na.omit, model=TRUE)
+summary(reg)
+```
+```{r echo=TRUE}
+durbinWatsonTest(reg, alternative= "positive")
+```
+
++   The Adjusted R-squared is 0.5211, but the Durbin-Watson statistic is 0.9971451. Thus suggesting that there is positive autocorrelation between the residuals.
+
+```{r echo=FALSE, fig.height=3,fig.width=8, warning=FALSE}
+par(mfrow=c(1,4), cex=0.7)
+plot(reg)
+```
+
+\newpage
+
+**Actual vs fitted chart:**
+
+```{r echo=FALSE,fig.height=5}
+par(mfrow=c(2,1), cex=0.8)
+invisible(plot.xts(log(rc/rdy), lwd=2, main="Actual Vs Fitted", 
+                   yaxis.right = FALSE, col="darkgreen"))
+invisible(lines(reg$fitted.values, lwd=2,col="darkblue"))
+addLegend("bottomright", c("Actual - log(rc/rdy)", "Fitted - regression"), 
+          col=c("darkgreen","darkblue"), lty=c(1,1))
+
+plot.zoo(reg$residuals,col="blue", ylab="Residuals", xlab="")
+abline(h=0)
+abline(v=as.yearqtr(as.Date("1976-01-01")), col="red")
+abline(v=as.yearqtr(as.Date("1956-01-01")), col="red")
+```
+
++   There are gaps in the Actual and the fitted values.
++   Chart of the residuals show signs of the positive auto correlations.
++   There are negative residuals prior to 1975.
++   Post 1975 the residuals shift up but there is still positive auto correlation.
+
+Thus providing evidence of a structural break prior to 1975. A dummy variable $sb\_1975\_4$, which has 1's prior to 1975 Q4 and 0's after that, is used to counter the structural break.
+
+```{r echo=FALSE, fig.height=2, warning=FALSE}
+plot.xts(sb_1975_4, ylim=c(0,1.5), col="blue")
+```
+
+\newpage
+
+## Structural Break Regression
+
+The dummy variable $sb\_1975\_4$ is added to the regression and rerun:
+
+```{r echo=TRUE}
+reg_wd <- lm(log(rc/rdy) ~ log(rnw/rdy) + sb_1975_4, model=TRUE)
+summary(reg_wd)
+```
+
+```{r echo=TRUE}
+durbinWatsonTest(reg_wd, alternative= "positive")
+```
+
++   The structural break has a negative coefficient of  -0.032066 and is significant.
++   There is improvement in the Adjusted R-squared.
++   The Durbin-Watson test indicates that there is still positive auto correlations in the residuals.
+
+```{r echo=FALSE, fig.height=3,fig.width=8, warning=FALSE}
+par(mfrow=c(1,4), cex=0.7)
+plot(reg_wd)
+```
+
+\newpage
+
+**Plot of the Actual vs the Fitted:**
+
+```{r echo=FALSE, fig.height=6}
+par(mfrow=c(2,1), cex=0.8)
+invisible(plot.xts(log(rc/rdy), lwd=2, main="Actual Vs Fitted", 
+                   yaxis.right = FALSE, col="darkgreen"))
+invisible(lines(reg_wd$fitted.values, lwd=2,col="darkblue"))
+addLegend("bottomright", c("Actual - log(rc/rdy)", "Fitted - regression"), 
+          col=c("darkgreen","darkblue"), lty=c(1,1))
+
+plot.zoo(reg_wd$residuals,col="blue", ylab="Residuals", xlab="")
+abline(h=0)
+abline(v=as.yearqtr(as.Date("1976-01-01")), col="red")
+abline(v=as.yearqtr(as.Date("1956-01-01")), col="red")
+abline(v=as.yearqtr(as.Date("1992-01-01")), col="darkgreen", lwd=2)
+abline(v=as.yearqtr(as.Date("1998-01-01")), col="darkgreen", lwd=2)
+abline(v=as.yearqtr(as.Date("2002-01-01")), col="darkgray", lwd=2)
+abline(v=as.yearqtr(as.Date("2006-01-01")), col="darkgray", lwd=2)
+```
+
++   The Actual vs and the Fitted graphs fit better in this regression.
+
++   The residuals are now both positive and negative before 1975 and there is higher frequency of the crossover after 1975, suggesting lesser positive auto correlations. 
++   There are though, periods in the 1990's and 2000's where there are sequences of  positive residuals. 
+
+Thus this, fixing of the structural break is not completely dealing with the short run variations in the data, and these will need to be accounted for in the specifications.
+
+Based on the Data examination the following long-run model for U.S. real consumption:
+$$
+ln(rc_t) = \beta_0 + \beta_1 \ ln(rdy_t) + \beta_2 \ ln(rnw_t) + \epsilon_t
+$$
+where $rc$ is real consumption, $rdy$ is real disposable income, and the model expressed in the **log** form will have the parameter estimates as elasticity.
+
+\newpage
+
+## Unit Root and Stationarity
+
+To determine the statistical properties of the included variables and test the consistency of the unit root hypothesis the Augmented Dickey Fuller test is done.
+
++   Augmented Dickey-Fuller has the unit root hypothesis.
++   Kwiatkowski-Phillips-Schmidt-Shin has the stationarity hypothesis.
+
+### Real Consumption
+ 
+```{r echo=TRUE, warning=FALSE}
+adf.test(log(rc), alternative = "stationary")
+kpss.test(log(rc), null = "Trend")
+```
+
++   The ADF test statistic cannot reject the unit root hypothesis and the KPSS statistic rejects the stationary null.
+
+### Real Disposable Income
+ 
+```{r echo=TRUE, warning=FALSE}
+adf.test(log(rdy), alternative = "stationary")
+kpss.test(log(rdy), null = "Trend")
+```
+
++   The ADF test statistic cannot reject the unit root hypothesis and the KPSS statistic rejects the stationary null.
+
+### Real Net Worth
+ 
+```{r echo=TRUE, warning=FALSE}
+adf.test(log(rnw), alternative = "stationary")
+kpss.test(log(rnw), null = "Trend")
+```
+
++   The ADF test cannot reject the unit root hypothesis and the KPSS statistic rejects the stationary null.
+
+
+The null hypothesis of a unit root cannot be rejected for any of the variables using the Augmented Dickey-Fuller statistic confirming non stationarity of the data.
+
+Thus, whether the variables form a co-integrated system with common trends needs to be checked.
+
+\newpage
+
+# Building the VECM
+
+## VAR
+
+Given that the variables $log(rc)$, $log(rdy)$ and $log(rnw)$ are consistent with the $I(1)$ hypothesis and possibly cointegrated. The optimal number of lags using the AIC, HQ and SIC criteria:
+```{r}
+VARselect(mrgd_data, lag.max = 4, type = "const", exogen = sb_1975_4)
+```
++   Based on the AIC, HQ 2 lags are used, this will also allow for some dynamics in the system.
+
+Chart of the impulse response coefficients of the estimated VAR:
+
+```{r echo=FALSE, warning=FALSE, fig.height=6, fig.width=8}
+var_est <- VAR(mrgd_data, p = 2, type ="const", exogen = sb_1975_4)
+impresp <- irf(var_est)
+par(mfrow=c(3,3), cex=0.6)
+plot(impresp, plot.type="single", main="", sub="")
+```
+*100 runs and 95% bootstrap CI*
+\newpage
+
+## Serial Correlation, Arch and Normality tests
+
+Serial Correlations, Arch effect and the Jarque-Bera test for normality.
+
+```{r}
+#serial correlation
+serial.test(var_est, lags.pt = 4, type="PT.asymptotic")
+#Arch effects
+arch.test(var_est, lags.multi = 4, multivariate.only = TRUE)
+#normality of residuals
+normality.test(var_est, multivariate.only = TRUE)
+```
+
++   The null hypothesis of joint normal distribution of errors is rejected.
+
+\newpage
+
+## Cointegration test
+
+The Johansen's trace/max eigen value statistic to test for the existance of a common trend (long run relationship) is used.
+
+```{r}
+johansen_test  <- ca.jo(mrgd_data, type="eigen", K=2, 
+                        ecdet="const", spec="longrun", dumvar = sb_1975_4)
+summary(johansen_test)
+```
+
++   The null that there is no cointegration can be rejected at a 10% level of significance. 
+
++ Based on the fairly large p values, there is one cointegrating vector, implying that the initial variables have cointegration. ( *there is only one long run relationship in the system* )
+
+\newpage
+Chart of the equation using the coefficients from the Johansen test:
+
+```{r warning=FALSE}
+s <- log(rc)*johansen_test@V[1] + log(rdy)*johansen_test@V[2] + 
+  log(rnw)*johansen_test@V[3] + johansen_test@V[4]
+```
+```{r echo=FALSE, warning=FALSE}
+plot.xts(s, col="darkgreen", main="equation from the Johansen test coefficients")
+```
+
+```{r echo=FALSE, warning=FALSE}
+plot.xts(diff(s), col="darkgreen", main="equation (Difference)")
+```
+
+\newpage
+
+## Exogenous variables
+
+Based on the "long-run" relationship an ECM can explain the actual behavior of the consumption during the period under consideration. Additional exogenous variables unemployment rate and consumer confidence index will be used. These variables are proxies for changes in the level of income uncertainty facing the household sector.
+
+Unit root test for the level of the consumer sentiment and the changes in the unemployment rate to check that they are independently consistent with the stationarity assumption.
+
+```{r}
+ur_cs <- ur.df(log(consumer_sentiment), type="trend", lags=1, selectlags="AIC")
+summary(ur_cs)
+```
+
++   The $log(consumer \_sentiment)$ is consistent with the stationary hypothesis.
+
+\newpage
+
+```{r}
+ur_ue <- ur.df(diff(unemp)[-1],type="trend", lags=1, selectlags="AIC")
+summary(ur_ue)
+```
+
++   The $d(unemp)$ is consistent with the stationary hypothesis, using the 5% level of significance. 
+
+\newpage
+
+## VECM
+
+```{r warning=FALSE}
+VECM_vec  <- ca.jo(mrgd_data, type="eigen", K=2, ecdet="const", 
+                 spec="longrun", dumvar = as.matrix(mrgd_dummy))
+VECM_exo <- vec2var(VECM_vec, r=1)
+summary(VECM_vec)
+```
+
++   The coefficients in the long-run equation are both statistically significantly different from zero and consistent with the economic priors.
+
+\newpage
+**The variance decomposition of the model:**
+
+```{r echo=FALSE, fig.height=7, warning=FALSE}
+# variance decomposition
+par(mfrow=c(1,1))
+plot(fevd(VECM_exo, n.ahead=8),xlab="")
+```
+
++   Real wealth, $log(rnw)$ is weakly exogenous with respect to consumption. This can be reasoned as, since both consumption and wealth are endogenous variables and dependent on each other, while the real wealth takes time to react to disequilibrium in consumption relative to its long-run path.
+
+
+\newpage
+
+Forecasting with the **Cointegration and Vector Error Correction Model**.
+
+```{r}
+frcst <- predict(VECM_exo, n.ahead = nrow(c_mrgd_dummy), 
+                 ci=0.90,  dumvar = as.matrix(c_mrgd_dummy), exo.fcst=TRUE)
+```
+
+```{r echo=FALSE, warning=FALSE}
+frcst_rc <- as.xts(frcst$fcst[1]$log.rc.[,1], order.by = idx_f)
+frcst_rdy <- as.xts(frcst$fcst[2]$log.rdy.[,1], order.by = idx_f)
+frcst_rnw <- as.xts(frcst$fcst[3]$log.rnw.[,1], order.by = idx_f)
+
+par(mfrow=c(2,1))
+invisible(plot(rbind(log(rc)["2002/2007"],log(c_rc)), col="darkgreen", ylab="", yaxis.right= FALSE, main="Real consumption"))
+invisible(lines(frcst_rc, col="blue", lwd=2))
+addLegend("bottomright", c("Actual", "Forecast"), bg = "black",
+          col=c("darkgreen","blue"), lty=c(1,1))
+
+invisible(plot(rbind(log(rdy)["2002/2007"],log(c_rdy)), col="darkgreen", yaxis.right= FALSE, main="Real Disposable Income"))
+invisible(lines(frcst_rdy, col="blue", lwd=2))
+addLegend("bottomright", c("Actual", "Forecast"), bg = "black",
+          col=c("darkgreen","blue"), lty=c(1,1))
+
+invisible(plot(rbind(log(rnw)["2002/2007"],log(c_rnw)), col="darkgreen", yaxis.right= FALSE, main="Real Net worth", ylim=c(17.80,18.25)))
+invisible(lines(frcst_rnw, col="blue", lwd=2))
+addLegend("bottomright", c("Actual", "Forecast"), bg = "black",
+          col=c("darkgreen","blue"), lty=c(1,1))
+
+saving_rate_1=100*(exp(frcst_rdy) - (exp(frcst_rc) + ((c_gov_transfers + c_interest_payments)/c_y_deflator)))/exp(frcst_rdy)
+
+invisible(plot(rbind(saving_rate["2002/2007"],c_saving_rate), col="darkgreen", yaxis.right= FALSE,main="Savings Rate"))
+invisible(lines(saving_rate_1, col="blue", lwd=2))
+addLegend("bottomright", c("Actual", "Forecast"), bg = "black",
+          col=c("darkgreen","blue"), lty=c(1,1))
+```
+
+# Conclusion
+
+The long-run model without any short-run dynamics, is able to produce acceptable out-of sample forecasts of real consumption and the household saving ratio, providing evidence that there was no structural change in U.S. household consumption habits because of the global financial crisis.
+
++   The underlying relationship between real consumption, real disposable income and real net worth did not change because of the onset of the financial crisis.
+
++   The observed movements in the saving rate after 2008Q1 appear to be the result of changes in disposable income and real net worth. The real net worth was adversely affected by the financial crisis.
+
++   Given that the consumption function did not change permanently, actions taken by the U.S. government (one being to raise government expenditure) to buffer the negative net worth shock were justifiable.
+
+
+\hfill
+
+
+## References
+
++   The data used in the case study has been downloaded from FRED *(https://fred.stlouisfed.org/)* and IMF.
+
++   Macroeconometric Forecasting a course of study offered by $IMFx, an online learning initiative of the International Monetary Fund. *(on https://edx.org)*
+
+\hfill
+
+\hfill $veneet.bhardwaj@gmail.com$
